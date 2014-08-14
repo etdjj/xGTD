@@ -1,38 +1,29 @@
 Attribute VB_Name = "xGTD"
-' xGTD
+' xGTD 
 ' a outlook GTD plugin, work together with (EverNote,ZonDone);(Doit.im)
 ' Log
 ' Version 1: XuHui:first version support create action
 ' Version 2: XuHui:archive processed mail to specified folder
 ' Version 3: Guanfeng:support create action at Explore View
 ' Version 4: XuHui: fix ZenDoen creating action bug, add "-"
+' Version 5: Guanfeng:suppport create action without email
+'                     support send email to note
+'                     make email read after achrive
+'                     move achrive folder out of Inbox
+'                     optimize input box
+'                     fix the issue when add subject to action name
+'                     fix the issue when config AddSubjectInEMAILName = false
 
 Public strGTDFolderBase As String
 Public strGTDMail As String
-Public strGTDAchriveFolerInOL As String
+Public strGTDAchriveFoler As String
 Public AddSubjectInEMAILName As String
 Public GTDTOOL As String
+Public NewActWhenNoEmailSelect As String
+Public strNoteMail As String
 
-Public myInbox As Outlook.Folder
-Public myDestFolder As Outlook.Folder
-
-
-
-Private Sub SendEmail(strSubject As String, strBody As String)
-
-    Dim objMsg As MailItem
-    Set objMsg = Application.CreateItem(olMailItem)
-
-    With objMsg
-        .To = strGTDMail
-        .subject = strSubject
-        .BodyFormat = olFormatHTML
-        .HTMLBody = strBody
-        .DeleteAfterSubmit = True
-        .Send
-    End With
-     
-    Set objMsg = Nothing
+Sub GetCurrent_xGTDVersion()
+    MsgBox "Version 5"
 End Sub
 
 Sub Initialize()
@@ -42,21 +33,19 @@ Sub Initialize()
     If Dir(strGTDFolderBase, vbDirectory) = "" Then
         MkDir strGTDFolderBase
         MsgBox "Create GTD folder " & strGTDFolderBase
-    Else
-        MsgBox "Aleady have GTD folder " & strGTDFolderBase
     End If
+
+    On Error GoTo ErrorHandler
+    Dim myAchrFolder As Outlook.Folder
+    Application.Session.Folders.Item(1).Folders.Add (strGTDAchriveFoler)
+
+ErrorHandler:
+     Set myAchrFolder = Application.Session.Folders.Item(1).Folders.Item(strGTDAchriveFoler)
+     MsgBox "GTD Folder       =  " & strGTDFolderBase & vbCrLf & "Archive Folder  =  " & myAchrFolder.FolderPath
 End Sub
 
 
 Sub CreateActionFromMail()
-    Dim myNameSpace As Outlook.NameSpace
-    
-    LoadSettings
-
-    Set myNameSpace = Application.GetNamespace("MAPI")
-    Set myInbox = myNameSpace.GetDefaultFolder(olFolderInbox)
-    Set myDestFolder = myInbox.Folders(strGTDAchriveFolerInOL)
-   
     If TypeName(Application.ActiveWindow) = "Inspector" Then
         CreateFromInspector
     ElseIf TypeName(Application.ActiveWindow) = "Explorer" Then
@@ -67,14 +56,19 @@ Sub CreateActionFromMail()
     End If
 End Sub
 
+Sub CreateActionFree()
+    Dim strActionName As String
+    LoadSettings
+
+    strActionName = GetActionName()
+    
+    SendEmail strActionName, ""
+End Sub
+
 Sub AchriveItem()
     Dim myNameSpace As Outlook.NameSpace
     
     LoadSettings
-
-    Set myNameSpace = Application.GetNamespace("MAPI")
-    Set myInbox = myNameSpace.GetDefaultFolder(olFolderInbox)
-    Set myDestFolder = myInbox.Folders(strGTDAchriveFolerInOL)
    
     If TypeName(Application.ActiveWindow) = "Inspector" Then
         AchriveFromInspector
@@ -87,21 +81,87 @@ Sub AchriveItem()
     
 End Sub
 
+Sub StoreToNote()
+    If TypeName(Application.ActiveWindow) = "Inspector" Then
+        StoreFromInspector
+    ElseIf TypeName(Application.ActiveWindow) = "Explorer" Then
+        StoreFromExplore
+    Else
+        MsgBox "You are in the wrong active window." & TypeName(Application.ActiveWindow)
+        Exit Sub
+    End If
+
+End Sub
+
+
+
+Private Sub StoreFromInspector()
+    Dim myInspector As Outlook.Inspector
+    Set myInspector = Application.ActiveInspector
+    Dim myItem As Outlook.MailItem
+    Dim strNoteName As String
+
+    If TypeName(myInspector.CurrentItem) <> "" Then
+        Set myItem = myInspector.CurrentItem
+        strNoteName = GetNoteName(myItem.Subject)
+        ForwardMail myItem, strNoteName, strNoteMail
+        AchriveMailItem myItem
+    Else
+        MsgBox "The item is of the wrong type."
+        Exit Sub
+    End If
+
+End Sub
+
+Private Sub StoreFromExplore()
+    Dim MailSelection As Selection
+    Dim SelectNum As Byte
+    Dim MailObject As Object
+    Dim NoteName As String
+    
+    LoadSettings
+    
+    Set MailSelection = Application.ActiveExplorer.Selection
+    SelectNum = MailSelection.Count
+
+    If SelectNum = 0 Then
+        MsgBox "Nothing Selected"
+        Exit Sub
+    End If
+
+    If SelectNum = 1 Then
+        Set MailObject = MailSelection.Item(1)
+        NoteName = GetNoteName(MailObject.Subject)
+        ForwardMail MailObject, NoteName, strNoteMail
+        AchriveMailItem MailObject
+    Else
+        strNoteName = GetNoteName("null")
+        For i = 1 To SelectNum
+           Set MailObject = MailSelection.Item(i)
+           If strNoteName = "null" Then
+              NoteName = MailObject.Subject
+           Else
+              NoteName = strNoteName & "-" & MailObject.Subject
+           End If
+           ForwardMail MailObject, NoteName, strNoteMail
+           AchriveMailItem MailObject
+        Next i
+    End If
+End Sub
+
+
 Private Sub AchriveFromInspector()
     Set myInspector = Application.ActiveInspector
     If TypeName(myInspector.CurrentItem) = "MailItem" Then
         Set myItem = myInspector.CurrentItem
-        
-        On Error Resume Next
-            myItem.Move myDestFolder
-
+        AchriveMailItem myItem
     End If
 End Sub
 
 Private Sub AchriveFromExplore()
     Dim MailSelection As Selection
     Dim SelectNum As Byte
-    Dim MailObject As Object
+    Dim MailObject As MailItem
     
 
     Set MailSelection = Application.ActiveExplorer.Selection
@@ -111,7 +171,7 @@ Private Sub AchriveFromExplore()
        Set MailObject = MailSelection.Item(i)
        
        If TypeName(MailObject) = "MailItem" Then
-          MailObject.Move myDestFolder
+          AchriveMailItem MailObject
           MailExist = "true"
        Else
           ExceptExist = "true"
@@ -144,7 +204,7 @@ Private Sub CreateFromInspector()
         End If
     
         strActionName = GetActionName()
-        mailPath = FomatMailPath(strActionName, myItem.subject, strGTDFolder)
+        mailPath = FomatMailPath(strActionName, myItem.Subject, strGTDFolder, 1)
         
         myItem.SaveAs mailPath, olMSG
         
@@ -155,8 +215,7 @@ Private Sub CreateFromInspector()
         End If
         SendEmail strActionName, SendMailContent
         
-        On Error Resume Next
-            myItem.Move myDestFolder
+        AchriveMailItem myItem
     Else
         MsgBox "The item is of the wrong type."
         Exit Sub
@@ -172,12 +231,13 @@ Private Sub CreateFromExplore()
     Dim SendMailContent As String
     Dim mailname As String
     Dim strGTDFolder As String
+    Dim i As Byte
     
     strActionName = GetActionName()
 
     Set MailSelection = Application.ActiveExplorer.Selection
     SelectNum = MailSelection.Count
-
+    
     For i = 1 To SelectNum
        Set MailObject = MailSelection.Item(i)
        
@@ -188,16 +248,17 @@ Private Sub CreateFromExplore()
                MkDir strGTDFolder
            End If
     
-           mailPath = FomatMailPath(strActionName, MailObject.subject, strGTDFolder)
+           mailPath = FomatMailPath(strActionName, MailObject.Subject, strGTDFolder, i)
+           
            MailObject.SaveAs mailPath, olMSG
            
            If i = 1 Then
-              SendMailContent = mailPath
+              SendMailContent = SendMailContent & mailPath
            Else
               SendMailContent = SendMailContent & "<br>" & mailPath
            End If
            
-           MailObject.Move myDestFolder
+           AchriveMailItem MailObject
            
            MailExist = "true"
        Else
@@ -214,60 +275,161 @@ Private Sub CreateFromExplore()
             MsgBox "Item which is not EMIAL Selected."
         End If
     Else
-        MsgBox "Not Any EMAIL Selected."
+        If NewActWhenNoEmailSelect = "true" Then
+            If GTDTOOL = "ZenDone" Then
+                strActionName = "- " & strActionName
+            End If
+            SendEmail strActionName, ""
+        Else
+            MsgBox "No EMAIL is selected."
+        End If
     End If
     
 
 End Sub
 
 Private Function FomatEMAILName(name As String) As String
-    name = Replace(name, ".", " ")
-    name = Replace(name, "/", " ")
-    name = Replace(name, "\", " ")
-    name = Replace(name, ":", " ")
-    name = Replace(name, "~", " ")
-    name = Replace(name, "#", " ")
-    name = Replace(name, "$", " ")
-    name = Replace(name, "%", " ")
-    name = Replace(name, "^", " ")
-    name = Replace(name, "|", " ")
-    name = Replace(name, "&", " ")
-    name = Replace(name, ";", " ")
+    name = Replace(name, ".", "_")
+    name = Replace(name, "/", "_")
+    name = Replace(name, "\", "_")
+    name = Replace(name, ":", "_")
+    name = Replace(name, "*", "_")
+    name = Replace(name, "?", "_")
+    name = Replace(name, "<", "_")
+    name = Replace(name, ">", "_")
+    name = Replace(name, "|", "_")
+    name = Replace(name, """", "_")
+    name = Replace(name, "_ ", "_")
+    name = Replace(name, " _", "_")
+    name = Replace(name, "__", "_")
     FomatEMAILName = name
 End Function
 
 Private Function GetActionName() As String
-    strActionHelp = "Action with a due date tomorrow and contained in the project invitations " & vbNewLine
-    strActionHelp = strActionHelp & "   - some action. tomorrow. invitations" & vbNewLine
-    strActionHelp = strActionHelp & "Action contained in a new project named improve documentation that belongs to your home area of responsibility" & vbNewLine
-    strActionHelp = strActionHelp & "   - some action. tomorrow. p: improve documentation. home " & vbNewLine
-    strActionHelp = strActionHelp & "Action delegated to Mike" & vbNewLine
-    strActionHelp = strActionHelp & "   - some action. mike" & vbNewLine
-    strActionHelp = strActionHelp & "Next action with 2 contexts: errands and a new one named shopping" & vbNewLine
-    strActionHelp = strActionHelp & "   - some action. errands. t: shopping. focus"
-    
-    If GTDTOOL = "doit" Then
-        strActionHelp = "Input the task name"
+
+    Dim strActionHelp As String
+    LoadSettings
+    If GTDTOOL = "ZenDone" Then
+        strActionHelp = "Action with a due date tomorrow and contained in the project invitations " & vbNewLine
+        strActionHelp = strActionHelp & "   - some action. tomorrow. invitations" & vbNewLine
+        strActionHelp = strActionHelp & "Action contained in a new project named improve documentation that belongs to your home area of responsibility" & vbNewLine
+        strActionHelp = strActionHelp & "   - some action. tomorrow. p: improve documentation. home " & vbNewLine
+        strActionHelp = strActionHelp & "Action delegated to Mike" & vbNewLine
+        strActionHelp = strActionHelp & "   - some action. mike" & vbNewLine
+        strActionHelp = strActionHelp & "Next action with 2 contexts: errands and a new one named shopping" & vbNewLine
+        strActionHelp = strActionHelp & "   - some action. errands. t: shopping. focus"
+    ElseIf GTDTOOL = "doit" Then
+        strActionHelp = "Doit.im-GTD"
+    Else
+        strActionHelp = ""
     End If
-    GetActionName = InputBox(strActionHelp, "Action Name")
     
-    If GetActionName = "" Then
-        MsgBox "Please type an action name"
+    InputRet = GetInput(strActionHelp, "Action Name", "To Do")
+    
+    If InputRet = "cancel" Then
         End
+    ElseIf InputRet = "null" Then
+        MsgBox "Please type the action name."
+        End
+    Else
+        GetActionName = InputRet
     End If
 End Function
 
-Private Function FomatMailPath(ActName As String, SubName As String, GTDFolder As String) As String
+Private Function GetNoteName(Subject As String) As String
+    Dim strHelp As String
+
+    LoadSettings
+    
+    strHelp = "Forward Email to " & strNoteMail & vbCrLf & vbCrLf
+    strHelp = strHelp & "As same as Email subject if keeping default name"
+    
+    InputRet = GetInput(strHelp, "Note Name", "plz input note name")
+    
+    If InputRet = "cancel" Then
+        End
+    ElseIf InputRet = "null" Then
+        GetNoteName = Subject
+    Else
+        GetNoteName = InputRet
+    End If
+End Function
+
+Private Function GetInput(Prompt As String, Title As String, default As String) As String
+
+    InputStr = InputBox(Prompt, Title, default)
+    
+    If InputStr = "" Then
+        GetInput = "cancel"
+    ElseIf InputStr = default Then
+        GetInput = "null"
+    Else
+        GetInput = InputStr
+    End If
+End Function
+
+
+Private Function FomatMailPath(ActName As String, SubName As String, GTDFolder As String, index As Byte) As String
     Dim mailname As String
     If AddSubjectInEMAILName = "true" Then
         mailname = ActName & "-" & SubName
     Else
-        mailname = ActName
+        If index = 1 Then
+            mailname = ActName
+        Else
+            mailname = ActName & "-" & (index - 1)
+        End If
     End If
     mailname = FomatEMAILName(mailname)
     FomatMailPath = GTDFolder & "\" & mailname & ".msg"
 End Function
 
-Sub GetCurrent_xGTDVersion()
-    MsgBox "Version 4"
+
+Private Function GetDestFolder() As Outlook.Folder
+    LoadSettings
+    
+    On Error GoTo CreateFolder
+    Set GetDestFolder = Application.Session.Folders.Item(1).Folders.Item(strGTDAchriveFoler)
+    Exit Function
+
+CreateFolder:
+    Application.Session.Folders.Item(1).Folders.Add (strGTDAchriveFoler)
+    Set myAchrFolder = Application.Session.Folders.Item(1).Folders.Item(strGTDAchriveFoler)
+    MsgBox "Archive Folder  =  " & myAchrFolder.FolderPath
+    Set GetDestFolder = Application.Session.Folders.Item(1).Folders.Item(strGTDAchriveFoler)
+End Function
+
+Private Sub AchriveMailItem(ByVal MyMail As MailItem)
+    MyMail.UnRead = False
+
+    On Error Resume Next
+    MyMail.Move GetDestFolder()
+End Sub
+
+Private Sub SendEmail(strSubject As String, strBody As String)
+
+    Dim objMsg As MailItem
+    Set objMsg = Application.CreateItem(olMailItem)
+
+    With objMsg
+        .To = strGTDMail
+        .Subject = strSubject
+        .BodyFormat = olFormatHTML
+        .HTMLBody = strBody
+        .DeleteAfterSubmit = True
+        .Send
+    End With
+     
+    Set objMsg = Nothing
+End Sub
+
+Private Sub ForwardMail(ByVal MailObject As MailItem, Subject As String, Receiver As String)
+    Set objMsg = MailObject.Forward
+    
+    With objMsg
+        .To = Receiver
+        .Subject = Subject
+        .DeleteAfterSubmit = True
+        .Send
+    End With
 End Sub

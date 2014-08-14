@@ -1,19 +1,27 @@
 Attribute VB_Name = "xGTD_Config"
+' xGTD Version 5 config
+
 Function LoadSettings()
 
     'The local folder to store the EMAIL.
     strGTDFolderBase = "e:\03_DelphiTech\GTD-Reference\"
     
-    'The EMAIL address you want to send the task.
+    'The Email address you want to send the task.
     strGTDMail = "etdjj.SQcAC@doitim.in"
     
-    'The folder in Outlook to store the archive EMAIL. NOTE: it must be a subfolder of INBOX.
-    strGTDAchriveFolerInOL = "Archive"
+    'The Note Email address.
+    strNoteMail = "zhuce_cgf_56@mywiz.cn"
     
-    'Control if add the subject to the name of local EMAIL.
+    'The folder in Outlook to store the archive Email.
+    strGTDAchriveFoler = "Archive"
+    
+    'Control if add the subject to the name of local Email.- true or false
     AddSubjectInEMAILName = "true"
     
     'Config the GTD Tool - "doit" , "ZenDone" supported
     GTDTOOL = "doit"
+    
+    'When no EMAIL selected, create the task without EMAIL. - true or false
+    NewActWhenNoEmailSelect = "false"
 
 End Function
