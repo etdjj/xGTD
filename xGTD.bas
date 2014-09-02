@@ -1,5 +1,5 @@
 Attribute VB_Name = "xGTD"
-' xGTD 
+' xGTD
 ' a outlook GTD plugin, work together with (EverNote,ZonDone);(Doit.im)
 ' Log
 ' Version 1: XuHui:first version support create action
@@ -13,6 +13,8 @@ Attribute VB_Name = "xGTD"
 '                     optimize input box
 '                     fix the issue when add subject to action name
 '                     fix the issue when config AddSubjectInEMAILName = false
+' Version 6  Guanfeng fix Achrive folder fix
+'                     fix some bug for FomatEMAILName
 
 Public strGTDFolderBase As String
 Public strGTDMail As String
@@ -23,7 +25,7 @@ Public NewActWhenNoEmailSelect As String
 Public strNoteMail As String
 
 Sub GetCurrent_xGTDVersion()
-    MsgBox "Version 5"
+    MsgBox "Version 6"
 End Sub
 
 Sub Initialize()
@@ -36,11 +38,13 @@ Sub Initialize()
     End If
 
     On Error GoTo ErrorHandler
-    Dim myAchrFolder As Outlook.Folder
-    Application.Session.Folders.Item(1).Folders.Add (strGTDAchriveFoler)
+    Dim myNameSpace As Outlook.NameSpace
+    Set myNameSpace = Application.GetNamespace("MAPI")
+    Set myInbox = myNameSpace.GetDefaultFolder(olFolderInbox)
+    myInbox.Parent.Folders.Add (strGTDAchriveFoler)
 
 ErrorHandler:
-     Set myAchrFolder = Application.Session.Folders.Item(1).Folders.Item(strGTDAchriveFoler)
+     Set myAchrFolder = myInbox.Parent.Folders.Item(strGTDAchriveFoler)
      MsgBox "GTD Folder       =  " & strGTDFolderBase & vbCrLf & "Archive Folder  =  " & myAchrFolder.FolderPath
 End Sub
 
@@ -302,6 +306,9 @@ Private Function FomatEMAILName(name As String) As String
     name = Replace(name, "_ ", "_")
     name = Replace(name, " _", "_")
     name = Replace(name, "__", "_")
+    name = Replace(name, "  ", " ")
+    name = Replace(name, "  ", " ")
+    name = Replace(name, "  ", " ")
     FomatEMAILName = name
 End Function
 
@@ -385,18 +392,21 @@ Private Function FomatMailPath(ActName As String, SubName As String, GTDFolder A
 End Function
 
 
-Private Function GetDestFolder() As Outlook.Folder
+Private Function GetDestFolder() As Outlook.folder
     LoadSettings
     
+    Dim myNameSpace As Outlook.NameSpace
+    Set myNameSpace = Application.GetNamespace("MAPI")
+    Set myInbox = myNameSpace.GetDefaultFolder(olFolderInbox)
+    
     On Error GoTo CreateFolder
-    Set GetDestFolder = Application.Session.Folders.Item(1).Folders.Item(strGTDAchriveFoler)
+        Set GetDestFolder = myInbox.Parent.Folders.Item(strGTDAchriveFoler)
     Exit Function
 
 CreateFolder:
-    Application.Session.Folders.Item(1).Folders.Add (strGTDAchriveFoler)
-    Set myAchrFolder = Application.Session.Folders.Item(1).Folders.Item(strGTDAchriveFoler)
-    MsgBox "Archive Folder  =  " & myAchrFolder.FolderPath
-    Set GetDestFolder = Application.Session.Folders.Item(1).Folders.Item(strGTDAchriveFoler)
+    myInbox.Parent.Folders.Add (strGTDAchriveFoler)
+    Set GetDestFolder = myInbox.Parent.Folders.Item(strGTDAchriveFoler)
+    MsgBox "Archive Folder  =  " & GetDestFolder.FolderPath
 End Function
 
 Private Sub AchriveMailItem(ByVal MyMail As MailItem)
