@@ -1,5 +1,5 @@
 Attribute VB_Name = "xGTD_Config"
-' xGTD Version 5 config
+' xGTD Version 7 config
 
 Function LoadSettings()
 
@@ -18,7 +18,7 @@ Function LoadSettings()
     'Control if add the subject to the name of local Email.- true or false
     AddSubjectInEMAILName = "true"
     
-    'Config the GTD Tool - "doit" , "ZenDone" supported
+    'Config the GTD Tool - "doit" , "ZenDone", "RTM" supported
     GTDTOOL = "doit"
     
     'When no EMAIL selected, create the task without EMAIL. - true or false

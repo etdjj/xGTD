@@ -15,6 +15,7 @@ Attribute VB_Name = "xGTD"
 '                     fix the issue when config AddSubjectInEMAILName = false
 ' Version 6  Guanfeng fix Achrive folder fix
 '                     fix some bug for FomatEMAILName
+' Version 7  XuHui: Support new GTD tool RTM
 
 Public strGTDFolderBase As String
 Public strGTDMail As String
@@ -25,7 +26,7 @@ Public NewActWhenNoEmailSelect As String
 Public strNoteMail As String
 
 Sub GetCurrent_xGTDVersion()
-    MsgBox "Version 6"
+    MsgBox "Version 7"
 End Sub
 
 Sub Initialize()
@@ -212,7 +213,7 @@ Private Sub CreateFromInspector()
         
         myItem.SaveAs mailPath, olMSG
         
-        SendMailContent = mailPath
+        SendMailContent = "Reference:" & vbNewLine & mailPath
         
         If GTDTOOL = "ZenDone" Then
             strActionName = "- " & strActionName
@@ -327,6 +328,11 @@ Private Function GetActionName() As String
         strActionHelp = strActionHelp & "   - some action. errands. t: shopping. focus"
     ElseIf GTDTOOL = "doit" Then
         strActionHelp = "Doit.im-GTD"
+    ElseIf GTDTOOL = "RTM" Then
+        strActionHelp = "Remeber The Milk" & vbNewLine
+        strActionHelp = strActionHelp & "Example:" & vbNewLine
+        strActionHelp = strActionHelp & "Take out the trash Monday at 8pm !1 *weekly =15min #Personal #errand" & vbNewLine
+        strActionHelp = strActionHelp & "Result:A task named Take out the trash will be added to your Personal List (with the properties due Monday at 8pm, high priority, repeat weekly, time estimate 15 minutes, tagged errand)."
     Else
         strActionHelp = ""
     End If
